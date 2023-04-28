@@ -1,0 +1,13 @@
+[package]
+name = "pknockerStream"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aws_lambda_events = { version = "0.8.5", default-features = false, features = ["s3"] }
+
+lambda_runtime = "0.8.0"
+tokio = { version = "1", features = ["macros"] }
+tracing = { version = "0.1", features = ["log"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt"] }
+
