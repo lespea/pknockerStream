@@ -1,5 +1,5 @@
-use aws_lambda_events::event::s3::S3Event;use lambda_runtime::{run, service_fn, Error, LambdaEvent};
-
+use aws_lambda_events::event::s3::S3Event;
+use lambda_runtime::{run, service_fn, Error, LambdaEvent};
 
 /// This is the main body for the function.
 /// Write your code inside it.
