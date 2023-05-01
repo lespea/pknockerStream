@@ -8,7 +8,11 @@ mod schema;
 
 use crate::models::Block;
 
+use crate::models::InetProto::{Tcp, Udp};
+use crate::schema::denies::dsl::denies;
 use chrono::{DateTime, Utc};
+use diesel::debug_query;
+use diesel::dsl::{exists, not};
 use diesel::prelude::*;
 use diesel::sql_types::Text;
 use diesel_async::pooled_connection::deadpool::Pool;
@@ -98,36 +102,70 @@ async fn main() -> Result<(), Error> {
 
     let pool = Pool::builder(mgr).max_size(2).build()?;
 
-    if false {
-        let mut conn = pool.get().await?;
+    use self::schema::blocks;
+    use self::schema::denies;
+    use crate::models::*;
 
-        use self::models::*;
-        use self::schema::blocks::dsl::*;
+    let mut conn = pool.get().await?;
 
-        for block in blocks.load::<Block>(&mut conn).await? {
-            println!("{block:?}")
+    if true {
+        let query = blocks::table
+            .left_outer_join(denies.on(blocks::src_ip.eq(denies::ip)))
+            .filter(not(blocks::port.eq(22).and(blocks::proto.eq(Tcp))))
+            .filter(denies::ip.is_null())
+            .order(blocks::event_ts.asc())
+            .select((
+                blocks::id,
+                blocks::src_ip,
+                blocks::dst_ip,
+                blocks::proto,
+                blocks::port,
+                blocks::event_ts,
+                blocks::insert_ts,
+            ));
+
+        info!("{:?}", debug_query::<diesel::pg::Pg, _>(&query));
+
+        for block in query.load::<Block>(&mut conn).await? {
+            println!("Block: {block:?}");
         }
     } else {
-        let mut conn = pool.get().await?;
+        let localip = IpNetwork::from_str("127.0.0.1").unwrap();
+        let otherip = IpNetwork::from_str("10.123.21.1").unwrap();
 
-        use self::models::*;
-        use self::schema::blocks;
-
-        let new_block = NewBlock {
-            src_ip: IpNetwork::from_str("127.0.0.1")?,
-            dst_ip: IpNetwork::from_str("10.99.88.44")?,
+        let mut new_block = NewBlock {
+            src_ip: localip,
+            dst_ip: IpNetwork::from_str("10.99.88.44").unwrap(),
             event_ts: Utc::now(),
-            proto: InetProto::Tcp,
+            proto: Tcp,
+            port: 55,
         };
 
-        for block in diesel::insert_into(blocks::table)
-            .values(&new_block)
-            .get_results::<Block>(&mut conn)
-            .await
-            .expect("Bad insert")
-        {
-            println!("Inserted {block:?}");
+        for ip in [localip, otherip] {
+            new_block.src_ip = ip;
+
+            for proto in [Tcp, Udp] {
+                new_block.proto = proto;
+                for port in [22, 443, 8080] {
+                    new_block.port = port;
+
+                    for block in diesel::insert_into(blocks::table)
+                        .values(&new_block)
+                        .get_results::<Block>(&mut conn)
+                        .await
+                        .expect("Bad insert")
+                    {
+                        println!("Inserted {block:?}");
+                    }
+                }
+            }
         }
+
+        diesel::insert_into(denies::table)
+            .values(denies::ip.eq(localip))
+            .execute(&mut conn)
+            .await
+            .expect("Bad insert");
     }
 
     Ok(())
