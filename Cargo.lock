@@ -1314,6 +1314,7 @@ dependencies = [
  "aws-sdk-secretsmanager",
  "aws_lambda_events",
  "chrono",
+ "deadpool",
  "diesel",
  "diesel-async",
  "diesel-derive-enum",
