@@ -14,11 +14,12 @@ use ipnetwork::IpNetwork;
 use lambda_runtime::Error;
 use once_cell::sync::Lazy;
 use tokio_postgres_rustls::MakeRustlsConnect;
+use tracing::log::error;
 
-use crate::models::InetProto::*;
 use crate::models::*;
 use crate::schema::*;
 use crate::secrets::DbConnSecret;
+use crate::WANTED_CONNS;
 
 static ROOT_CERT: Lazy<MakeRustlsConnect> = Lazy::new(|| {
     let mut root = rustls::RootCertStore::empty();
@@ -61,21 +62,36 @@ pub async fn get_pool(db_conn_info: DbConnSecret) -> Result<Pool<AsyncPgConnecti
     Ok(Pool::builder(mgr).max_size(2).build()?)
 }
 
-pub async fn to_check(pool: &Pool<AsyncPgConnection>) -> Result<(), Error> {
+pub async fn run_checks(pool: &Pool<AsyncPgConnection>) -> Result<(), Error> {
     let mut conn = pool.get().await?;
 
     for to_check in view_to_check::table.load::<ViewToCheck>(&mut conn).await? {
-        println!("{to_check:?}");
-        let conns = serde_json::from_str::<Conns>(&to_check.conns).unwrap();
-        for v in conns.0.iter() {
-            println!("CONN={v:?}");
+        let conns = serde_json::from_str::<Conns>(&to_check.conns)?;
+        if conns == *WANTED_CONNS {
+        } else {
+            let src = to_check.src_ip;
+            if let Err(err) = add_deny(to_check, pool).await {
+                error!("Couldn't insert {src} into the db: {err}")
+            }
         }
-        println!("== {}", conns == *crate::WANTED_CONNS);
     }
     Ok(())
 }
 
+pub async fn add_deny(check: ViewToCheck, pool: &Pool<AsyncPgConnection>) -> Result<(), Error> {
+    let mut conn = pool.get().await?;
+
+    diesel::insert_into(denies::table)
+        .values(denies::ip.eq(check.src_ip))
+        .execute(&mut conn)
+        .await?;
+
+    Ok(())
+}
+
 pub async fn insert_test_data(pool: &Pool<AsyncPgConnection>) -> Result<(), Error> {
+    use crate::models::InetProto::*;
+
     let mut conn = pool.get().await?;
 
     let localip = IpNetwork::from_str("127.0.0.1").unwrap();

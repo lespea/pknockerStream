@@ -1,9 +1,11 @@
-use crate::models::Conns;
+use crate::AWS_CONF;
 use aws_config::SdkConfig;
 use lambda_runtime::Error;
 use serde::Deserialize;
 use tokio_postgres::config::SslMode;
 use tokio_postgres::Config;
+
+use crate::models::Conns;
 
 #[derive(Deserialize, Debug)]
 pub struct DbConnSecret {
@@ -23,8 +25,8 @@ impl DbConnSecret {
     }
 }
 
-pub async fn get_conn_info(conf: &SdkConfig) -> Result<(DbConnSecret, Conns), Error> {
-    let client = aws_sdk_secretsmanager::Client::new(conf);
+pub async fn get_conn_info() -> Result<(DbConnSecret, Conns), Error> {
+    let client = aws_sdk_secretsmanager::Client::new(AWS_CONF.get().unwrap());
 
     let db_fut = client.get_secret_value().secret_id("pknockerdb").send();
     let conns_fut = client.get_secret_value().secret_id("pknockerConns").send();
