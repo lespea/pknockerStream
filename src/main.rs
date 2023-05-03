@@ -1,15 +1,11 @@
 #![allow(unused_imports)]
 
-mod models;
-mod schema;
+use std::env;
+use std::io::Cursor;
+use std::ops::Deref;
+use std::str::FromStr;
+use std::time::Duration;
 
-// use aws_lambda_events::event::s3::S3Event;
-// use lambda_runtime::{run, service_fn, Error, LambdaEvent};
-
-use crate::models::Block;
-
-use crate::models::InetProto::{Tcp, Udp};
-use crate::schema::denies::dsl::denies;
 use chrono::{DateTime, Utc};
 use diesel::debug_query;
 use diesel::dsl::{exists, not};
@@ -18,21 +14,29 @@ use diesel::sql_types::Text;
 use diesel_async::pooled_connection::deadpool::Pool;
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use diesel_async::{AsyncConnection, AsyncPgConnection, RunQueryDsl};
-use dotenvy::dotenv;
 use futures_util::future::BoxFuture;
 use futures_util::FutureExt;
 use ipnetwork::IpNetwork;
 use lambda_runtime::Error;
 use once_cell::sync::Lazy;
 use postgres_native_tls::MakeTlsConnector;
-use std::env;
-use std::io::Cursor;
-use std::str::FromStr;
-use std::time::Duration;
 use tokio_postgres::Config;
 use tokio_postgres_rustls::MakeRustlsConnect;
 use tracing::instrument::WithSubscriber;
 use tracing::log::{debug, info};
+
+use crate::models::Block;
+use crate::models::Conns;
+use crate::models::InetProto::{Tcp, Udp};
+use crate::schema::added;
+use crate::schema::denies::dsl::denies;
+
+mod models;
+mod schema;
+mod secrets;
+
+// use aws_lambda_events::event::s3::S3Event;
+// use lambda_runtime::{run, service_fn, Error, LambdaEvent};
 
 /// This is the main body for the function.
 /// Write your code inside it.
@@ -66,8 +70,6 @@ fn init() {
         // disabling time is handy because CloudWatch will add the ingestion time.
         .without_time()
         .init();
-
-    dotenv().unwrap();
 }
 
 fn establish_connection(url: &str) -> BoxFuture<ConnectionResult<AsyncPgConnection>> {
@@ -89,11 +91,31 @@ fn establish_connection(url: &str) -> BoxFuture<ConnectionResult<AsyncPgConnecti
     fut.boxed()
 }
 
+const PRINT_WANTED: bool = false;
+
+static WANTED_CONNS: Lazy<Conns> = Lazy::new(|| {
+    Conns(vec![
+        (Tcp, 7614),
+        (Udp, 1234),
+        (Tcp, 9971),
+        (Udp, 1234),
+        (Udp, 23657),
+        (Tcp, 9911),
+    ])
+});
+
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    init();
+    if PRINT_WANTED {
+        let out = serde_json::to_string(WANTED_CONNS.deref())?;
+        println!("{out}");
+        return Ok(());
+    }
 
-    let url = env::var("DATABASE_URL").expect("No db url env");
+    init();
+    let conf = aws_config::from_env().region("us-east-1").load().await;
+
+    let url = secrets::get_conn_info(&conf).await?.to_db_url();
 
     let mgr = AsyncDieselConnectionManager::<AsyncPgConnection>::new_with_setup(
         url,
@@ -109,39 +131,53 @@ async fn main() -> Result<(), Error> {
     let mut conn = pool.get().await?;
 
     if true {
-        let query = blocks::table
-            .left_outer_join(denies.on(blocks::src_ip.eq(denies::ip)))
-            .filter(not(blocks::port.eq(22).and(blocks::proto.eq(Tcp))))
-            .filter(denies::ip.is_null())
-            .order(blocks::event_ts.asc())
-            .select((
-                blocks::id,
-                blocks::src_ip,
-                blocks::dst_ip,
-                blocks::proto,
-                blocks::port,
-                blocks::event_ts,
-                blocks::insert_ts,
-            ));
+        if false {
+            let query = blocks::table
+                .left_outer_join(denies.on(blocks::src_ip.eq(denies::ip)))
+                .filter(not(blocks::port.eq(22).and(blocks::proto.eq(Tcp))))
+                .filter(denies::ip.is_null())
+                .order(blocks::event_ts.asc())
+                .select((
+                    blocks::id,
+                    blocks::src_ip,
+                    blocks::dst_ip,
+                    blocks::proto,
+                    blocks::port,
+                    blocks::event_ts,
+                    blocks::insert_ts,
+                ));
 
-        info!("{:?}", debug_query::<diesel::pg::Pg, _>(&query));
+            info!("{:?}", debug_query::<diesel::pg::Pg, _>(&query));
 
-        for block in query.load::<Block>(&mut conn).await? {
-            println!("Block: {block:?}");
+            for block in query.load::<Block>(&mut conn).await? {
+                println!("Block: {block:?}");
+            }
+        } else {
+            for to_check in view_to_check::table.load::<ViewToCheck>(&mut conn).await? {
+                println!("{to_check:?}");
+                let conns = serde_json::from_str::<Conns>(&to_check.conns).unwrap();
+                for v in conns.0.iter() {
+                    println!("CONN={v:?}");
+                }
+                println!("== {}", conns == *WANTED_CONNS);
+            }
         }
     } else {
         let localip = IpNetwork::from_str("127.0.0.1").unwrap();
-        let otherip = IpNetwork::from_str("10.123.21.1").unwrap();
+        let otherip1 = IpNetwork::from_str("10.123.21.1").unwrap();
+        let otherip2 = IpNetwork::from_str("172.16.5.4").unwrap();
+
+        let dstip = IpNetwork::from_str("10.99.88.44").unwrap();
 
         let mut new_block = NewBlock {
             src_ip: localip,
-            dst_ip: IpNetwork::from_str("10.99.88.44").unwrap(),
+            dst_ip: dstip,
             event_ts: Utc::now(),
             proto: Tcp,
             port: 55,
         };
 
-        for ip in [localip, otherip] {
+        for ip in [localip, otherip1, otherip2] {
             new_block.src_ip = ip;
 
             for proto in [Tcp, Udp] {
@@ -163,6 +199,12 @@ async fn main() -> Result<(), Error> {
 
         diesel::insert_into(denies::table)
             .values(denies::ip.eq(localip))
+            .execute(&mut conn)
+            .await
+            .expect("Bad insert");
+
+        diesel::insert_into(added::table)
+            .values((added::src_ip.eq(otherip2), added::dst_ip.eq(dstip)))
             .execute(&mut conn)
             .await
             .expect("Bad insert");

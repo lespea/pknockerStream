@@ -7,11 +7,19 @@ pub mod sql_types {
 }
 
 diesel::table! {
+    added (src_ip, dst_ip) {
+        src_ip -> Inet,
+        dst_ip -> Inet,
+        added_on -> Timestamptz,
+    }
+}
+
+diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::InetProto;
 
     blocks (id) {
-        id -> Int4,
+        id -> Int8,
         src_ip -> Inet,
         dst_ip -> Inet,
         proto -> InetProto,
@@ -24,7 +32,8 @@ diesel::table! {
 diesel::table! {
     denies (ip) {
         ip -> Inet,
+        added_on -> Timestamptz,
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(blocks, denies,);
+diesel::allow_tables_to_appear_in_same_query!(added, blocks, denies,);

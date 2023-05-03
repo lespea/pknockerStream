@@ -3,7 +3,7 @@ CREATE TYPE inet_proto AS ENUM ('tcp', 'udp', 'icmp');
 -- Your SQL goes here
 CREATE TABLE blocks
 (
-    id        SERIAL PRIMARY KEY,
+    id        BIGSERIAL                NOT NULL PRIMARY KEY,
     src_ip    inet                     NOT NULL,
     dst_ip    inet                     NOT NULL,
     proto     inet_proto               NOT NULL,
