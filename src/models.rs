@@ -1,6 +1,5 @@
 use chrono::{DateTime, NaiveDateTime, Utc};
 use diesel::prelude::*;
-use diesel::sql_types::{Integer, Timestamptz};
 use ipnetwork::IpNetwork;
 use serde::{Deserialize, Serialize};
 

@@ -1,28 +1,23 @@
 #![allow(unused_imports)]
 
-use std::env;
 use std::io::Cursor;
 use std::ops::Deref;
 use std::str::FromStr;
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use diesel::debug_query;
 use diesel::dsl::{exists, not};
 use diesel::prelude::*;
-use diesel::sql_types::Text;
 use diesel_async::pooled_connection::deadpool::Pool;
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;
-use diesel_async::{AsyncConnection, AsyncPgConnection, RunQueryDsl};
+use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use futures_util::future::BoxFuture;
 use futures_util::FutureExt;
 use ipnetwork::IpNetwork;
 use lambda_runtime::Error;
 use once_cell::sync::Lazy;
-use postgres_native_tls::MakeTlsConnector;
-use tokio_postgres::Config;
 use tokio_postgres_rustls::MakeRustlsConnect;
-use tracing::instrument::WithSubscriber;
 use tracing::log::{debug, info};
 
 use crate::models::Block;
@@ -115,10 +110,15 @@ async fn main() -> Result<(), Error> {
     init();
     let conf = aws_config::from_env().region("us-east-1").load().await;
 
-    let url = secrets::get_conn_info(&conf).await?.to_db_url();
+    let (db_conn_info, wanted) = secrets::get_conn_info(&conf).await?;
+
+    if true {
+        println!("{wanted:?}");
+        return Ok(());
+    }
 
     let mgr = AsyncDieselConnectionManager::<AsyncPgConnection>::new_with_setup(
-        url,
+        db_conn_info.to_db_url(),
         establish_connection,
     );
 
