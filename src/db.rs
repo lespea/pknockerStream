@@ -66,14 +66,25 @@ pub async fn run_checks(pool: &Pool<AsyncPgConnection>) -> Result<(), Error> {
     let mut conn = pool.get().await?;
 
     for to_check in view_to_check::table.load::<ViewToCheck>(&mut conn).await? {
+        let src = to_check.src_ip;
+
         let conns = serde_json::from_str::<Conns>(&to_check.conns)?;
         if conns == *WANTED_CONNS {
-        } else {
-            let src = to_check.src_ip;
-            if let Err(err) = add_deny(to_check, pool).await {
-                error!("Couldn't insert {src} into the db: {err}")
-            }
-        }
+            match crate::ec2::get_ip_map().await.get(&to_check.src_ip) {
+                Some(info) => {
+                    if let Err(err) = crate::ec2::add_allow(to_check.src_ip, info).await {
+                        error!("Couldn't allow {src}: {err}")
+                    }
+                }
+                None => {
+                    if let Err(err) = add_deny(to_check, pool).await {
+                        error!("Couldn't insert {src} into the db: {err}")
+                    };
+                }
+            };
+        } else if let Err(err) = add_deny(to_check, pool).await {
+            error!("Couldn't insert {src} into the db: {err}")
+        };
     }
     Ok(())
 }

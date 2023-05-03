@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use aws_config::SdkConfig;
 use lambda_runtime::Error;
-use once_cell::sync::{Lazy, OnceCell};
+use once_cell::sync::Lazy;
 use tracing::log::{debug, info};
 
 use crate::models::Block;
@@ -15,7 +15,9 @@ use crate::models::Conns;
 use crate::models::InetProto::{Tcp, Udp};
 use crate::schema::added;
 
+mod aws;
 mod db;
+mod ec2;
 mod models;
 mod schema;
 mod secrets;
@@ -46,8 +48,6 @@ static WANTED_CONNS: Lazy<Conns> = Lazy::new(|| {
         (Tcp, 9911),
     ])
 });
-
-static AWS_CONF: OnceCell<SdkConfig> = OnceCell::new();
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -80,7 +80,4 @@ async fn init() {
         // disabling time is handy because CloudWatch will add the ingestion time.
         .without_time()
         .init();
-
-    let conf = aws_config::from_env().region("us-east-1").load().await;
-    AWS_CONF.set(conf).unwrap();
 }

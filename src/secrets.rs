@@ -1,4 +1,3 @@
-use crate::AWS_CONF;
 use aws_config::SdkConfig;
 use lambda_runtime::Error;
 use serde::Deserialize;
@@ -26,7 +25,7 @@ impl DbConnSecret {
 }
 
 pub async fn get_conn_info() -> Result<(DbConnSecret, Conns), Error> {
-    let client = aws_sdk_secretsmanager::Client::new(AWS_CONF.get().unwrap());
+    let client = aws_sdk_secretsmanager::Client::new(crate::aws::get_conf().await);
 
     let db_fut = client.get_secret_value().secret_id("pknockerdb").send();
     let conns_fut = client.get_secret_value().secret_id("pknockerConns").send();
@@ -39,19 +38,3 @@ pub async fn get_conn_info() -> Result<(DbConnSecret, Conns), Error> {
 
     Ok((db, conns))
 }
-
-// pub async fn get_inst() -> Result<(), Error> {
-//     Ok(())
-// let client = aws_sdk_ec2::Client::new(&shared_config);
-// let instances = client.describe_instances().send().await?;
-//
-// for res in instances.reservations().unwrap_or_default() {
-//     for instance in res.instances().unwrap_or_default() {
-//         let name = instance.key_name().unwrap_or_default();
-//         let ip = instance.public_ip_address().unwrap_or_default();
-//         println!("{name} :: {ip}");
-//     }
-// }
-//
-// Ok(())
-// }
