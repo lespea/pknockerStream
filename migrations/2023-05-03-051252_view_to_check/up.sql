@@ -11,5 +11,5 @@ WHERE b.port != 22
   AND d.ip IS NULL
   AND a.dst_ip IS NULL
 GROUP BY b.src_ip, b.dst_ip
-HAVING COUNT(b.src_ip) < 10
+HAVING COUNT(b.src_ip) BETWEEN 3 AND 10
 ;

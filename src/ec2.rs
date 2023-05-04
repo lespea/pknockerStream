@@ -35,16 +35,22 @@ pub async fn get_ip_map<'a>() -> &'a HashMap<IpNetwork, InstanceInfo> {
             for res in instances.reservations().unwrap_or_default() {
                 for instance in res.instances().unwrap_or_default() {
                     let name = instance.key_name().unwrap_or_default().to_string();
-                    if let Ok(ip) =
-                        IpNetwork::from_str(instance.public_ip_address().unwrap_or_default())
-                    {
-                        let groups = instance.security_groups().unwrap_or_default();
-                        if !groups.is_empty() {
-                            let idents = groups
-                                .iter()
-                                .flat_map(|g| g.group_id().map(|s| s.to_string()))
-                                .collect();
-                            map.insert(ip, InstanceInfo { name, idents });
+                    for ips in [instance.public_ip_address(), instance.private_ip_address()] {
+                        if let Ok(ip) = IpNetwork::from_str(ips.unwrap_or_default()) {
+                            let groups = instance.security_groups().unwrap_or_default();
+                            if !groups.is_empty() {
+                                let idents = groups
+                                    .iter()
+                                    .flat_map(|g| g.group_id().map(|s| s.to_string()))
+                                    .collect();
+                                map.insert(
+                                    ip,
+                                    InstanceInfo {
+                                        name: name.clone(),
+                                        idents,
+                                    },
+                                );
+                            }
                         }
                     }
                 }
@@ -59,13 +65,13 @@ pub async fn add_allow(allow_ip: IpNetwork, info: &InstanceInfo) -> Result<(), E
     let client = get_client().await;
     let name = info.name.clone();
 
-    let mut ip = allow_ip.to_string();
-    ip.push_str("/32");
+    let ip = allow_ip.to_string();
 
     for ident in info.idents.iter() {
         match client
             .authorize_security_group_ingress()
-            .set_cidr_ip(Some(ip.to_string()))
+            .set_cidr_ip(Some(ip.clone()))
+            .set_from_port(Some(22))
             .set_to_port(Some(22))
             .set_ip_protocol(Some("tcp".to_string()))
             .set_group_id(Some(ident.clone()))
@@ -73,7 +79,7 @@ pub async fn add_allow(allow_ip: IpNetwork, info: &InstanceInfo) -> Result<(), E
             .await
         {
             Ok(_) => info!("Allow {ip} to {ident} for {name}"),
-            Err(err) => error!("Err allowing {ip} to {ident} for {name}: {err}"),
+            Err(err) => error!("Err allowing {ip} to {ident} for {name}: {err:?}"),
         };
     }
 

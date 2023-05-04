@@ -12,5 +12,7 @@ CREATE TABLE blocks
     insert_ts TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX unique_block_idx ON blocks (src_ip, dst_ip, proto, port);
-CREATE INDEX event_idx ON blocks (event_ts);
+-- CREATE UNIQUE INDEX unique_block_idx ON blocks (src_ip, dst_ip, proto, port);
+CREATE INDEX ON blocks (src_ip);
+CREATE INDEX ON blocks (event_ts);
+CREATE INDEX ON blocks (insert_ts);

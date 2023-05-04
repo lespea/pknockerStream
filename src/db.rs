@@ -78,21 +78,25 @@ pub async fn run_checks(pool: &Pool<AsyncPgConnection>) -> Result<(), Error> {
         let mut conns = serde_json::from_str::<Conns>(&to_check.conns)?;
         conns.0.sort();
         if conns == *crate::WANTED_CONNS {
-            match crate::ec2::get_ip_map().await.get(&to_check.src_ip) {
+            match crate::ec2::get_ip_map().await.get(&to_check.dst_ip) {
                 Some(info) => {
                     if let Err(err) = crate::ec2::add_allow(to_check.src_ip, info).await {
                         error!("Couldn't allow {src}: {err}")
                     }
                 }
                 None => {
-                    // if let Err(err) = add_deny(to_check, pool).await {
-                    warn!("Unknown src ip {}", to_check.src_ip);
-                    // };
+                    let keys: Vec<IpNetwork> =
+                        crate::ec2::get_ip_map().await.keys().copied().collect();
+                    warn!("Unknown dst ip {} in {keys:?}", to_check.dst_ip);
+                    let src = to_check.src_ip;
+                    if let Err(err) = add_deny(to_check, pool).await {
+                        error!("Couldn't insert {src} into the block db: {err}")
+                    };
                 }
             };
         } else if crate::WANTED_CONNS.should_block(conns) {
             if let Err(err) = add_deny(to_check, pool).await {
-                error!("Couldn't insert {src} into the db: {err}")
+                error!("Couldn't insert {src} into the block db: {err}")
             }
         };
     }

@@ -22,8 +22,6 @@ pub async fn add_records(
     add: bool,
 ) -> Result<(), Error> {
     let reader = SerializedFileReader::new(Bytes::from(data))?;
-    let mut conn = pool.get().await?;
-
     let (fields, _) = Fields::from_metadata(reader.metadata());
 
     let mut to_add = Vec::with_capacity(reader.num_row_groups());
@@ -44,6 +42,8 @@ pub async fn add_records(
     }
 
     if !to_add.is_empty() {
+        let mut conn = pool.get().await?;
+
         let res = diesel::insert_into(blocks::table)
             .values(&to_add)
             .execute(&mut conn)
@@ -146,14 +146,18 @@ impl Fields {
             Err(e) => return Err(Error::from(e)),
         };
 
+        let ts_secs = row.get_long(self.start)?;
         Ok(NewBlock {
             src_ip: IpNetwork::from_str(row.get_string(self.src)?)?,
             dst_ip: IpNetwork::from_str(row.get_string(self.dst)?)?,
             proto,
             port: row.get_int(self.port)?,
-            event_ts: match Utc.timestamp_opt(row.get_long(self.start)?, 0).single() {
+            event_ts: match Utc.timestamp_opt(ts_secs, 0).single() {
                 Some(ts) => ts,
-                None => return Err(Error::from("invalid timestamp?")),
+                None => {
+                    error!("Invalid timestamp :: {ts_secs}");
+                    Utc::now()
+                }
             },
         })
     }
