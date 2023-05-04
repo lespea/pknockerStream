@@ -144,7 +144,7 @@ impl Fields {
             dst_ip: IpNetwork::from_str(row.get_string(self.dst)?)?,
             proto,
             port: row.get_int(self.port)?,
-            event_ts: match Utc.timestamp_millis_opt(row.get_long(self.start)?).single() {
+            event_ts: match Utc.timestamp_opt(row.get_long(self.start)?, 0).single() {
                 Some(ts) => ts,
                 None => return Err(Error::from("invalid timestamp?")),
             },
