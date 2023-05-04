@@ -22,7 +22,7 @@ async fn function_handler(event: LambdaEvent<S3Event>) -> Result<(), Error> {
     let pool = db::get_pool(db_conn_info).await?;
 
     if let Err(err) = db::clean(&pool).await {
-        error!("Error cleaning: {err}")
+        error!("Error cleaning: {err:?}")
     };
     s3::get_and_parse(event.payload, &pool).await;
     db::run_checks(&pool).await

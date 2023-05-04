@@ -56,6 +56,13 @@ pub struct NewBlock {
     pub event_ts: DateTime<Utc>,
 }
 
+#[derive(Insertable, Debug)]
+#[diesel(table_name = crate::schema::added)]
+pub struct ToAdd {
+    pub src_ip: IpNetwork,
+    pub dst_ip: IpNetwork,
+}
+
 #[derive(Queryable, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
 #[diesel(table_name = crate::schema::denies)]
 pub struct Denies {

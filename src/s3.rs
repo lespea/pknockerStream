@@ -25,14 +25,14 @@ pub async fn get_and_parse(event: S3Event, pool: &Pool<AsyncPgConnection>) {
             .send()
             .await
         {
-            Err(err) => error!("Couldn't get bucket: {err}"),
+            Err(err) => error!("Couldn't get bucket: {err:?}"),
 
             Ok(resp) => match resp.body.collect().await {
-                Err(err) => error!("Couldn't get bucket obj: {err}"),
+                Err(err) => error!("Couldn't get bucket obj: {err:?}"),
 
                 Ok(body) => {
                     if let Err(err) = crate::parq::add_records(body.to_vec(), pool, true).await {
-                        error!("Couldn't add block records: {err}")
+                        error!("Couldn't add block records: {err:?}")
                     }
                 }
             },

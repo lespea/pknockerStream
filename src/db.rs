@@ -81,7 +81,17 @@ pub async fn run_checks(pool: &Pool<AsyncPgConnection>) -> Result<(), Error> {
             match crate::ec2::get_ip_map().await.get(&to_check.dst_ip) {
                 Some(info) => {
                     if let Err(err) = crate::ec2::add_allow(to_check.src_ip, info).await {
-                        error!("Couldn't allow {src}: {err}")
+                        error!("Couldn't allow {src}: {err:?}")
+                    } else if let Err(err) = add_added(
+                        ToAdd {
+                            src_ip: to_check.src_ip,
+                            dst_ip: to_check.dst_ip,
+                        },
+                        pool,
+                    )
+                    .await
+                    {
+                        error!("Error inserting added: {err:?}");
                     }
                 }
                 None => {
@@ -90,16 +100,27 @@ pub async fn run_checks(pool: &Pool<AsyncPgConnection>) -> Result<(), Error> {
                     warn!("Unknown dst ip {} in {keys:?}", to_check.dst_ip);
                     let src = to_check.src_ip;
                     if let Err(err) = add_deny(to_check, pool).await {
-                        error!("Couldn't insert {src} into the block db: {err}")
+                        error!("Couldn't insert {src} into the block db: {err:?}")
                     };
                 }
             };
         } else if crate::WANTED_CONNS.should_block(conns) {
             if let Err(err) = add_deny(to_check, pool).await {
-                error!("Couldn't insert {src} into the block db: {err}")
+                error!("Couldn't insert {src} into the block db: {err:?}")
             }
         };
     }
+    Ok(())
+}
+
+pub async fn add_added(to_add: ToAdd, pool: &Pool<AsyncPgConnection>) -> Result<(), Error> {
+    let mut conn = pool.get().await?;
+
+    diesel::insert_into(added::table)
+        .values(&to_add)
+        .execute(&mut conn)
+        .await?;
+
     Ok(())
 }
 
