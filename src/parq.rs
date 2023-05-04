@@ -47,7 +47,8 @@ pub async fn add_records(
                 } else {
                     let res = diesel::insert_into(blocks::table)
                         .values(&to_add)
-                        .execute(&mut conn).await;
+                        .execute(&mut conn)
+                        .await;
                     if res.is_ok() {
                         info!("Added {to_add:?}")
                     } else {
