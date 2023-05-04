@@ -19,6 +19,7 @@ mod aws;
 mod db;
 mod ec2;
 mod models;
+mod parq;
 mod schema;
 mod secrets;
 
@@ -37,6 +38,9 @@ mod secrets;
 // }
 
 const PRINT_WANTED: bool = false;
+const TEST_PARQ: bool = true;
+
+static TEST_DATA: &[u8] = include_bytes!("../test.log.parquet");
 
 static WANTED_CONNS: Lazy<Conns> = Lazy::new(|| {
     Conns(vec![
@@ -51,24 +55,30 @@ static WANTED_CONNS: Lazy<Conns> = Lazy::new(|| {
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    if PRINT_WANTED {
-        let out = serde_json::to_string(WANTED_CONNS.deref())?;
-        println!("{out}");
-        return Ok(());
-    }
-
     init().await;
 
     let (db_conn_info, _) = secrets::get_conn_info().await?;
     let pool = db::get_pool(db_conn_info).await?;
 
-    if false {
-        db::insert_test_data(&pool).await?;
-    }
-    if true {
-        db::run_checks(&pool).await?;
-    }
+    if PRINT_WANTED {
+        print_wanted().await
+    } else if TEST_PARQ {
+        parq::add_records(TEST_DATA.to_vec(), pool, false).await
+    } else {
+        if false {
+            db::insert_test_data(&pool).await?;
+        }
+        if true {
+            db::run_checks(&pool).await?;
+        }
 
+        Ok(())
+    }
+}
+
+async fn print_wanted() -> Result<(), Error> {
+    let out = serde_json::to_string(WANTED_CONNS.deref())?;
+    println!("{out}");
     Ok(())
 }
 
