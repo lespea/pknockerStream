@@ -1,40 +1,30 @@
-#![allow(unused_variables)]
+use std::str::FromStr;
 
-use arrow::util::pretty::pretty_format_batches;
-use arrow_array::cast::AsArray;
-use arrow_array::RecordBatch;
 use bytes::Bytes;
-use chrono::{DateTime, TimeZone, Utc};
-use diesel::prelude::*;
+use chrono::{TimeZone, Utc};
 use diesel_async::pooled_connection::deadpool::Pool;
-use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
-use futures_util::{StreamExt, TryStreamExt};
 use ipnetwork::IpNetwork;
 use lambda_runtime::Error;
-use std::io;
-use std::ops::Index;
-use std::str::FromStr;
-use tokio::fs::File;
-
-use crate::models::{Block, InetProto, NewBlock};
-use crate::schema::blocks;
-use parquet::arrow::{ParquetRecordBatchStreamBuilder, ProjectionMask};
+use parquet::arrow::ProjectionMask;
 use parquet::file::metadata::ParquetMetaData;
 use parquet::file::reader::FileReader;
 use parquet::file::reader::SerializedFileReader;
 use parquet::record::{Row, RowAccessor};
 use tracing::log::{error, info};
 
+use crate::models::{InetProto, NewBlock};
+use crate::schema::blocks;
+
 pub async fn add_records(
     data: Vec<u8>,
-    pool: Pool<AsyncPgConnection>,
+    pool: &Pool<AsyncPgConnection>,
     add: bool,
 ) -> Result<(), Error> {
     let reader = SerializedFileReader::new(Bytes::from(data))?;
     let mut conn = pool.get().await?;
 
-    let (fields, mask) = Fields::from_metadata(reader.metadata());
+    let (fields, _) = Fields::from_metadata(reader.metadata());
 
     let rows = reader.get_row_iter(None)?;
     for row in rows {

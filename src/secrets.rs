@@ -1,8 +1,5 @@
-use aws_config::SdkConfig;
 use lambda_runtime::Error;
 use serde::Deserialize;
-use tokio_postgres::config::SslMode;
-use tokio_postgres::Config;
 
 use crate::models::Conns;
 

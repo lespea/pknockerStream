@@ -2,8 +2,6 @@ use std::io::Cursor;
 use std::str::FromStr;
 
 use chrono::Utc;
-use deadpool::managed::Object;
-use diesel::debug_query;
 use diesel::prelude::*;
 use diesel_async::pooled_connection::deadpool::Pool;
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;
@@ -19,7 +17,6 @@ use tracing::log::error;
 use crate::models::*;
 use crate::schema::*;
 use crate::secrets::DbConnSecret;
-use crate::WANTED_CONNS;
 
 static ROOT_CERT: Lazy<MakeRustlsConnect> = Lazy::new(|| {
     let mut root = rustls::RootCertStore::empty();
@@ -62,6 +59,14 @@ pub async fn get_pool(db_conn_info: DbConnSecret) -> Result<Pool<AsyncPgConnecti
     Ok(Pool::builder(mgr).max_size(2).build()?)
 }
 
+pub async fn clean(pool: &Pool<AsyncPgConnection>) -> Result<(), Error> {
+    let mut conn = pool.get().await?;
+    diesel::sql_query("CALL clean_db();")
+        .execute(&mut conn)
+        .await?;
+    Ok(())
+}
+
 pub async fn run_checks(pool: &Pool<AsyncPgConnection>) -> Result<(), Error> {
     let mut conn = pool.get().await?;
 
@@ -69,7 +74,7 @@ pub async fn run_checks(pool: &Pool<AsyncPgConnection>) -> Result<(), Error> {
         let src = to_check.src_ip;
 
         let conns = serde_json::from_str::<Conns>(&to_check.conns)?;
-        if conns == *WANTED_CONNS {
+        if conns == *crate::WANTED_CONNS {
             match crate::ec2::get_ip_map().await.get(&to_check.src_ip) {
                 Some(info) => {
                     if let Err(err) = crate::ec2::add_allow(to_check.src_ip, info).await {

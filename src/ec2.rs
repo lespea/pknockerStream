@@ -1,12 +1,13 @@
-use crate::aws::get_conf;
-use aws_sdk_ec2::types::GroupIdentifier;
+use std::collections::HashMap;
+use std::str::FromStr;
+
 use aws_sdk_ec2::Client;
 use ipnetwork::IpNetwork;
 use lambda_runtime::Error;
-use std::collections::HashMap;
-use std::str::FromStr;
 use tokio::sync::OnceCell;
 use tracing::log::{error, info};
+
+use crate::aws::get_conf;
 
 pub struct InstanceInfo {
     name: String,

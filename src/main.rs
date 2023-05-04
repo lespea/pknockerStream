@@ -1,46 +1,34 @@
-#![allow(unused_imports)]
-
-use std::io::Cursor;
 use std::ops::Deref;
-use std::str::FromStr;
-use std::time::Duration;
 
-use aws_config::SdkConfig;
-use lambda_runtime::Error;
+use aws_lambda_events::event::s3::S3Event;
+use lambda_runtime::{run, service_fn, Error, LambdaEvent};
 use once_cell::sync::Lazy;
-use tracing::log::{debug, info};
+use tracing::log::error;
 
-use crate::models::Block;
 use crate::models::Conns;
 use crate::models::InetProto::{Tcp, Udp};
-use crate::schema::added;
 
 mod aws;
 mod db;
 mod ec2;
 mod models;
 mod parq;
+mod s3;
 mod schema;
 mod secrets;
 
-// use aws_lambda_events::event::s3::S3Event;
-// use lambda_runtime::{run, service_fn, Error, LambdaEvent};
+async fn function_handler(event: LambdaEvent<S3Event>) -> Result<(), Error> {
+    let (db_conn_info, _) = secrets::get_conn_info().await?;
+    let pool = db::get_pool(db_conn_info).await?;
 
-/// This is the main body for the function.
-/// Write your code inside it.
-/// There are some code example in the following URLs:
-/// - https://github.com/awslabs/aws-lambda-rust-runtime/tree/main/examples
-/// - https://github.com/aws-samples/serverless-rust-demo/
-// async fn function_handler(event: LambdaEvent<S3Event>) -> Result<(), Error> {
-// Extract some useful information from the request
-
-// Ok(())
-// }
+    if let Err(err) = db::clean(&pool).await {
+        error!("Error cleaning: {err}")
+    };
+    s3::get_and_parse(event.payload, &pool).await;
+    db::run_checks(&pool).await
+}
 
 const PRINT_WANTED: bool = false;
-const TEST_PARQ: bool = true;
-
-static TEST_DATA: &[u8] = include_bytes!("../test.log.parquet");
 
 static WANTED_CONNS: Lazy<Conns> = Lazy::new(|| {
     Conns(vec![
@@ -57,22 +45,18 @@ static WANTED_CONNS: Lazy<Conns> = Lazy::new(|| {
 async fn main() -> Result<(), Error> {
     init().await;
 
-    let (db_conn_info, _) = secrets::get_conn_info().await?;
-    let pool = db::get_pool(db_conn_info).await?;
-
     if PRINT_WANTED {
         print_wanted().await
-    } else if TEST_PARQ {
-        parq::add_records(TEST_DATA.to_vec(), pool, false).await
-    } else {
-        if false {
-            db::insert_test_data(&pool).await?;
-        }
-        if true {
-            db::run_checks(&pool).await?;
-        }
+    } else if false {
+        let (db_conn_info, _) = secrets::get_conn_info().await?;
+        let pool = db::get_pool(db_conn_info).await?;
+
+        db::insert_test_data(&pool).await?;
+        db::run_checks(&pool).await?;
 
         Ok(())
+    } else {
+        run(service_fn(function_handler)).await
     }
 }
 
