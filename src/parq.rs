@@ -26,27 +26,34 @@ pub async fn add_records(
 
     let (fields, _) = Fields::from_metadata(reader.metadata());
 
+    let mut to_add = Vec::with_capacity(reader.num_row_groups());
     let rows = reader.get_row_iter(None)?;
+
     for row in rows {
         match fields.to_block(row) {
             Err(e) => debug!("Error adding row - {e}"),
 
-            Ok(to_add) => {
+            Ok(block) => {
                 if !add {
                     info!("Would add {to_add:?}");
                 } else {
-                    let res = diesel::insert_into(blocks::table)
-                        .values(&to_add)
-                        .execute(&mut conn)
-                        .await;
-                    if res.is_ok() {
-                        info!("Added {to_add:?}")
-                    } else {
-                        error!("Couldn't add {to_add:?}: {res:?}")
-                    }
+                    to_add.push(block);
                 }
             }
         };
+    }
+
+    if !to_add.is_empty() {
+        let res = diesel::insert_into(blocks::table)
+            .values(&to_add)
+            .execute(&mut conn)
+            .await;
+
+        if res.is_ok() {
+            info!("Added {to_add:?}")
+        } else {
+            error!("Couldn't add {to_add:?}: {res:?}")
+        }
     }
 
     Ok(())

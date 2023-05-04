@@ -6,6 +6,13 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct Conns(pub Vec<(InetProto, u16)>);
 
+impl Conns {
+    #[inline]
+    pub fn should_block(&self, that: Conns) -> bool {
+        that.0.len() >= self.0.len()
+    }
+}
+
 #[derive(
     diesel_derive_enum::DbEnum,
     Debug,

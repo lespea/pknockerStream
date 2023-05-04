@@ -2,7 +2,7 @@
 CREATE VIEW view_to_check AS
 SELECT b.src_ip,
        b.dst_ip,
-       JSON_AGG(JSON_BUILD_ARRAY(b.proto, b.port) ORDER BY b.event_ts) AS conns
+       JSON_AGG(JSON_BUILD_ARRAY(b.proto, b.port)) AS conns
 --        JSON_AGG(JSON_BUILD_OBJECT('proto', b.proto, 'port', b.port) ORDER BY b.event_ts) AS conns
 FROM blocks b
          LEFT OUTER JOIN denies d ON b.src_ip = d.ip

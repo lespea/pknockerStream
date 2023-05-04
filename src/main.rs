@@ -31,14 +31,16 @@ async fn function_handler(event: LambdaEvent<S3Event>) -> Result<(), Error> {
 const PRINT_WANTED: bool = false;
 
 static WANTED_CONNS: Lazy<Conns> = Lazy::new(|| {
-    Conns(vec![
+    let mut v = vec![
         (Tcp, 7614),
         (Udp, 1234),
         (Tcp, 9971),
         (Udp, 1234),
         (Udp, 23657),
         (Tcp, 9911),
-    ])
+    ];
+    v.sort();
+    Conns(v)
 });
 
 #[tokio::main]

@@ -12,7 +12,7 @@ use ipnetwork::IpNetwork;
 use lambda_runtime::Error;
 use once_cell::sync::Lazy;
 use tokio_postgres_rustls::MakeRustlsConnect;
-use tracing::log::{error, info};
+use tracing::log::{error, info, warn};
 
 use crate::models::*;
 use crate::schema::*;
@@ -75,7 +75,8 @@ pub async fn run_checks(pool: &Pool<AsyncPgConnection>) -> Result<(), Error> {
     for to_check in view_to_check::table.load::<ViewToCheck>(&mut conn).await? {
         let src = to_check.src_ip;
 
-        let conns = serde_json::from_str::<Conns>(&to_check.conns)?;
+        let mut conns = serde_json::from_str::<Conns>(&to_check.conns)?;
+        conns.0.sort();
         if conns == *crate::WANTED_CONNS {
             match crate::ec2::get_ip_map().await.get(&to_check.src_ip) {
                 Some(info) => {
@@ -84,13 +85,15 @@ pub async fn run_checks(pool: &Pool<AsyncPgConnection>) -> Result<(), Error> {
                     }
                 }
                 None => {
-                    if let Err(err) = add_deny(to_check, pool).await {
-                        error!("Couldn't insert {src} into the db: {err}")
-                    };
+                    // if let Err(err) = add_deny(to_check, pool).await {
+                    warn!("Unknown src ip {}", to_check.src_ip);
+                    // };
                 }
             };
-        } else if let Err(err) = add_deny(to_check, pool).await {
-            error!("Couldn't insert {src} into the db: {err}")
+        } else if crate::WANTED_CONNS.should_block(conns) {
+            if let Err(err) = add_deny(to_check, pool).await {
+                error!("Couldn't insert {src} into the db: {err}")
+            }
         };
     }
     Ok(())
