@@ -10,9 +10,13 @@ pub async fn get_and_parse(event: S3Event, pool: &Pool<AsyncPgConnection>) {
 
     for rec in event.records {
         let bucket = rec.s3.bucket.name;
-        let key = rec.s3.object.key.map(|k| decode(&k).unwrap_or_default().to_string());
+        let key = rec
+            .s3
+            .object
+            .key
+            .map(|k| decode(&k).unwrap_or_default().to_string());
 
-        info!("Connecting to {bucket:?}/{key:?} :: {:?}", client.conf());
+        info!("Attempting to connect to {bucket:?}/{key:?}");
 
         match client
             .get_object()

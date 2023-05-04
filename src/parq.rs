@@ -11,7 +11,7 @@ use parquet::file::metadata::ParquetMetaData;
 use parquet::file::reader::FileReader;
 use parquet::file::reader::SerializedFileReader;
 use parquet::record::{Row, RowAccessor};
-use tracing::log::{error, info};
+use tracing::log::{debug, error, info};
 
 use crate::models::{InetProto, NewBlock};
 use crate::schema::blocks;
@@ -29,10 +29,10 @@ pub async fn add_records(
     let rows = reader.get_row_iter(None)?;
     for row in rows {
         match fields.to_block(row) {
-            Err(e) => error!("Error adding row - {e}"),
+            Err(e) => debug!("Error adding row - {e}"),
 
             Ok(to_add) => {
-                if add {
+                if !add {
                     info!("Would add {to_add:?}");
                 } else {
                     let res = diesel::insert_into(blocks::table)
@@ -42,7 +42,7 @@ pub async fn add_records(
                     if res.is_ok() {
                         info!("Added {to_add:?}")
                     } else {
-                        info!("Couldn't add {to_add:?}: {res:?}")
+                        error!("Couldn't add {to_add:?}: {res:?}")
                     }
                 }
             }
