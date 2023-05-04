@@ -2023,6 +2023,7 @@ dependencies = [
  "tokio-postgres-rustls",
  "tracing",
  "tracing-subscriber",
+ "urlencoding",
 ]
 
 [[package]]

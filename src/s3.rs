@@ -3,17 +3,21 @@ use aws_sdk_s3::Client;
 use diesel_async::pooled_connection::deadpool::Pool;
 use diesel_async::AsyncPgConnection;
 use tracing::log::{error, info};
+use urlencoding::decode;
 
 pub async fn get_and_parse(event: S3Event, pool: &Pool<AsyncPgConnection>) {
     let client = Client::new(crate::aws::get_conf().await);
 
     for rec in event.records {
-        info!("Connecting to {rec:?} :: {:?}", rec.s3.object.url_decoded_key.clone());
+        let bucket = rec.s3.bucket.name;
+        let key = rec.s3.object.key.map(|k| decode(&k).unwrap_or_default().to_string());
+
+        info!("Connecting to {bucket:?}/{key:?} :: {:?}", client.conf());
 
         match client
             .get_object()
-            .set_bucket(rec.s3.bucket.name)
-            .set_key(rec.s3.object.url_decoded_key)
+            .set_bucket(bucket)
+            .set_key(key)
             .send()
             .await
         {
@@ -24,7 +28,7 @@ pub async fn get_and_parse(event: S3Event, pool: &Pool<AsyncPgConnection>) {
 
                 Ok(body) => {
                     if let Err(err) = crate::parq::add_records(body.to_vec(), pool, true).await {
-                        error!("Couldn't get bucket obj: {err}")
+                        error!("Couldn't add block records: {err}")
                     }
                 }
             },
