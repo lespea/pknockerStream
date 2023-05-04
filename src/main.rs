@@ -73,5 +73,6 @@ async fn init() {
         .with_target(false)
         // disabling time is handy because CloudWatch will add the ingestion time.
         .without_time()
+        .with_ansi(false)
         .init();
 }

@@ -12,7 +12,7 @@ use ipnetwork::IpNetwork;
 use lambda_runtime::Error;
 use once_cell::sync::Lazy;
 use tokio_postgres_rustls::MakeRustlsConnect;
-use tracing::log::error;
+use tracing::log::{error, info};
 
 use crate::models::*;
 use crate::schema::*;
@@ -60,6 +60,7 @@ pub async fn get_pool(db_conn_info: DbConnSecret) -> Result<Pool<AsyncPgConnecti
 }
 
 pub async fn clean(pool: &Pool<AsyncPgConnection>) -> Result<(), Error> {
+    info!("Cleaning db");
     let mut conn = pool.get().await?;
     diesel::sql_query("CALL clean_db();")
         .execute(&mut conn)
@@ -68,6 +69,7 @@ pub async fn clean(pool: &Pool<AsyncPgConnection>) -> Result<(), Error> {
 }
 
 pub async fn run_checks(pool: &Pool<AsyncPgConnection>) -> Result<(), Error> {
+    info!("Run checks");
     let mut conn = pool.get().await?;
 
     for to_check in view_to_check::table.load::<ViewToCheck>(&mut conn).await? {
